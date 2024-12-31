@@ -1,11 +1,11 @@
 extern crate core;
 
-use std::time::Instant;
-
+use clap::Parser;
 use rand::Rng;
 use speedy2d::color::Color;
 use speedy2d::window::{WindowHandler, WindowHelper, WindowStartupInfo};
 use speedy2d::{Graphics2D, Window};
+use std::time::Instant;
 
 use crate::util::particle::Particle;
 use crate::util::particle_quad_tree::{ParticleQuadTree, QuadtreeVisitor};
@@ -16,16 +16,34 @@ pub mod util;
 struct Universe<T> {
     particles: Vec<Particle<T>>,
     grav_const: T,
+    num_particles: u32,
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(long, default_value_t = 1600)]
+    window_width: u32,
+
+    #[arg(long, default_value_t = 900)]
+    window_height: u32,
+
+    #[arg(long, default_value_t = 1000)]
+    num_particles: u32,
 }
 
 fn main() {
-    const WIDTH: f32 = 1600.0;
-    const HEIGHT: f32 = 900.0;
-    let window = Window::new_centered("Particles", (WIDTH as u32, HEIGHT as u32)).unwrap();
+    let args = Args::parse();
+
+    // initialize window in which the universe is drawn
+    let window =
+        Window::new_centered("Particles", (args.window_width, args.window_height)).unwrap();
     window.run_loop(UniverseWindowHandler {
+        // create a new universe handler with an empty universe
         universe: Universe {
             particles: Vec::new(),
             grav_const: 10.0,
+            num_particles: args.num_particles,
         },
         last_tick: Instant::now(),
     })
@@ -39,11 +57,11 @@ struct UniverseWindowHandler {
 impl WindowHandler for UniverseWindowHandler {
     fn on_start(&mut self, _helper: &mut WindowHelper<()>, _info: WindowStartupInfo) {
         // initialize particles
-        const NUM_PARTICLES: usize = 10_000;
         let mut rng = rand::thread_rng();
-        (0..NUM_PARTICLES).for_each(|_| {
-            let x = rng.gen_range(100.0..1400.0);
-            let y = rng.gen_range(100.0..800.0);
+        (0..self.universe.num_particles).for_each(|_| {
+            // non-uniform distribution for a more interesting simulation
+            let x = rng.gen_range(0.0..500.0);
+            let y = rng.gen_range(0.0..100.0);
             self.universe.particles.push(create_particle(x, y));
         });
     }
@@ -79,11 +97,11 @@ impl WindowHandler for UniverseWindowHandler {
         });
         let width = max_x - min_x;
         let height = max_y - min_y;
-        let cx = (min_x + max_x) / 2.0;
-        let cy = (min_y + max_y) / 2.0;
+        let center_x = (min_x + max_x) / 2.0;
+        let center_y = (min_y + max_y) / 2.0;
 
         // create the temporary quadtree
-        let mut quadtree = ParticleQuadTree::new(Vector2D { x: cx, y: cy }, width, height, 100);
+        let mut quadtree = ParticleQuadTree::new(Vector2D { x: center_x, y: center_y }, width, height, 100);
         let num_particles = self.universe.particles.len();
         (0..num_particles).for_each(|i| {
             quadtree.insert(&self.universe.particles, i);
@@ -100,7 +118,7 @@ impl WindowHandler for UniverseWindowHandler {
             universe: &self.universe,
             univ_width: width,
             univ_height: height,
-            univ_center: Vector2D { x: cx, y: cy },
+            univ_center: Vector2D { x: center_x, y: center_y },
             screen_width: helper.get_size_pixels().x as f32,
             screen_height: helper.get_size_pixels().y as f32,
         };
