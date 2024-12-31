@@ -1,7 +1,7 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use crate::Particle;
 use crate::util::vector2d::Vector2D;
+use crate::Particle;
 
 pub trait QuadtreePointValue<T> {
     fn from(value: usize) -> T;
@@ -35,15 +35,30 @@ enum QuadtreeNode<T> {
     },
 }
 
-
 pub trait QuadtreeVisitor<T> {
     fn visit_node(&mut self, tree: &ParticleQuadTree<T>);
     fn visit_leaf_node(&mut self, tree: &ParticleQuadTree<T>, element_indices: &Vec<usize>);
     fn visit_element(&mut self, index: usize);
 }
 
-impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Add<Output=T> + Mul<Output=T> + Div<Output=T> + std::fmt::Display> ParticleQuadTree<T> {
-    pub(crate) fn new(center: Vector2D<T>, width: T, height: T, max_capacity: usize) -> ParticleQuadTree<T> {
+impl<
+        T: Copy
+            + Default
+            + QuadtreePointValue<T>
+            + PartialOrd
+            + Sub<Output = T>
+            + Add<Output = T>
+            + Mul<Output = T>
+            + Div<Output = T>
+            + std::fmt::Display,
+    > ParticleQuadTree<T>
+{
+    pub(crate) fn new(
+        center: Vector2D<T>,
+        width: T,
+        height: T,
+        max_capacity: usize,
+    ) -> ParticleQuadTree<T> {
         ParticleQuadTree {
             center,
             summary_particle: Particle {
@@ -85,7 +100,12 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
 
         // recursion: add element to correct child node
         match self.node {
-            QuadtreeNode::Node { ref mut top_left, ref mut top_right, ref mut bottom_left, ref mut bottom_right } => {
+            QuadtreeNode::Node {
+                ref mut top_left,
+                ref mut top_right,
+                ref mut bottom_left,
+                ref mut bottom_right,
+            } => {
                 if element.position.x <= self.center.x {
                     // left
                     if element.position.y <= self.center.y {
@@ -106,7 +126,9 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
                     }
                 }
             }
-            QuadtreeNode::Leaf { ref mut element_indices } => {
+            QuadtreeNode::Leaf {
+                ref mut element_indices,
+            } => {
                 if element_indices.len() < self.max_capacity {
                     // recursion end: add element to list of elements
                     element_indices.push(index);
@@ -124,25 +146,41 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
                         Vector2D {
                             x: cx.sub(quarter_width),
                             y: cy.sub(quarter_height),
-                        }, half_width, half_height, self.max_capacity));
+                        },
+                        half_width,
+                        half_height,
+                        self.max_capacity,
+                    ));
 
                     let mut top_right = Box::new(ParticleQuadTree::new(
                         Vector2D {
                             x: cx.add(quarter_width),
                             y: cy.sub(quarter_height),
-                        }, half_width, half_height, self.max_capacity));
+                        },
+                        half_width,
+                        half_height,
+                        self.max_capacity,
+                    ));
 
                     let mut bottom_left = Box::new(ParticleQuadTree::new(
                         Vector2D {
                             x: cx.sub(quarter_width),
                             y: cy.add(quarter_height),
-                        }, half_width, half_height, self.max_capacity));
+                        },
+                        half_width,
+                        half_height,
+                        self.max_capacity,
+                    ));
 
                     let mut bottom_right = Box::new(ParticleQuadTree::new(
                         Vector2D {
                             x: cx.add(quarter_width),
                             y: cy.add(quarter_height),
-                        }, half_width, half_height, self.max_capacity));
+                        },
+                        half_width,
+                        half_height,
+                        self.max_capacity,
+                    ));
 
                     while !element_indices.is_empty() {
                         let element_index = element_indices.swap_remove(0);
@@ -183,14 +221,21 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
 
     pub fn visit(&self, visitor: &mut dyn QuadtreeVisitor<T>) {
         match self.node {
-            QuadtreeNode::Node { ref top_left, ref top_right, ref bottom_left, ref bottom_right } => {
+            QuadtreeNode::Node {
+                ref top_left,
+                ref top_right,
+                ref bottom_left,
+                ref bottom_right,
+            } => {
                 visitor.visit_node(self);
                 top_left.visit(visitor);
                 top_right.visit(visitor);
                 bottom_left.visit(visitor);
                 bottom_right.visit(visitor);
             }
-            QuadtreeNode::Leaf { ref element_indices } => {
+            QuadtreeNode::Leaf {
+                ref element_indices,
+            } => {
                 visitor.visit_leaf_node(self, element_indices);
                 for element_index in element_indices {
                     visitor.visit_element(*element_index);
@@ -203,13 +248,64 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
         self.tick_with_summaries(elements, grav_const, elapsed_s, &Vec::new());
     }
 
-    fn tick_with_summaries(&self, elements: &mut Vec<Particle<T>>, grav_const: T, elapsed_s: T, summaries: &Vec<Particle<T>>) {
+    fn tick_with_summaries(
+        &self,
+        elements: &mut Vec<Particle<T>>,
+        grav_const: T,
+        elapsed_s: T,
+        summaries: &Vec<Particle<T>>,
+    ) {
         match &self.node {
-            QuadtreeNode::Node { top_left, top_right, bottom_left, bottom_right } => {
-                top_left.tick_with_summaries(elements, grav_const, elapsed_s, &ParticleQuadTree::create_summaries(summaries, top_right, bottom_left, bottom_right));
-                top_right.tick_with_summaries(elements, grav_const, elapsed_s, &ParticleQuadTree::create_summaries(summaries, top_left, bottom_left, bottom_right));
-                bottom_left.tick_with_summaries(elements, grav_const, elapsed_s, &ParticleQuadTree::create_summaries(summaries, top_right, top_left, bottom_right));
-                bottom_right.tick_with_summaries(elements, grav_const, elapsed_s, &ParticleQuadTree::create_summaries(summaries, top_right, bottom_left, top_left));
+            QuadtreeNode::Node {
+                top_left,
+                top_right,
+                bottom_left,
+                bottom_right,
+            } => {
+                top_left.tick_with_summaries(
+                    elements,
+                    grav_const,
+                    elapsed_s,
+                    &ParticleQuadTree::create_summaries(
+                        summaries,
+                        top_right,
+                        bottom_left,
+                        bottom_right,
+                    ),
+                );
+                top_right.tick_with_summaries(
+                    elements,
+                    grav_const,
+                    elapsed_s,
+                    &ParticleQuadTree::create_summaries(
+                        summaries,
+                        top_left,
+                        bottom_left,
+                        bottom_right,
+                    ),
+                );
+                bottom_left.tick_with_summaries(
+                    elements,
+                    grav_const,
+                    elapsed_s,
+                    &ParticleQuadTree::create_summaries(
+                        summaries,
+                        top_right,
+                        top_left,
+                        bottom_right,
+                    ),
+                );
+                bottom_right.tick_with_summaries(
+                    elements,
+                    grav_const,
+                    elapsed_s,
+                    &ParticleQuadTree::create_summaries(
+                        summaries,
+                        top_right,
+                        bottom_left,
+                        top_left,
+                    ),
+                );
             }
             QuadtreeNode::Leaf { element_indices } => {
                 // simple gravitational pull
@@ -260,7 +356,12 @@ impl<T: Copy + Default + QuadtreePointValue<T> + PartialOrd + Sub<Output=T> + Ad
         }
     }
 
-    fn create_summaries(original: &Vec<Particle<T>>, tree1: &Box<ParticleQuadTree<T>>, tree2: &Box<ParticleQuadTree<T>>, tree3: &Box<ParticleQuadTree<T>>) -> Vec<Particle<T>> {
+    fn create_summaries(
+        original: &Vec<Particle<T>>,
+        tree1: &Box<ParticleQuadTree<T>>,
+        tree2: &Box<ParticleQuadTree<T>>,
+        tree3: &Box<ParticleQuadTree<T>>,
+    ) -> Vec<Particle<T>> {
         let mut summaries = original.clone();
         summaries.push(tree1.summary_particle.clone());
         summaries.push(tree2.summary_particle.clone());
